@@ -4,37 +4,29 @@ import argparse
 from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay, classification_report
 import torch
 from safetensors.torch import load_file
-from torch.utils.tensorboard import SummaryWriter
 import numpy as np
 from tqdm import tqdm
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import json
 from time import perf_counter
+import os
 
-
-#python train.py --save_dir "results/" --sample_len 1024 --samples_per_sig 10 --max_samples 20000 --epochs 200 --batch_sz 100 --checkpoint 1000 --signal_type "Complex" --device "cuda:2" 
-#to visulalize training: tensorboard --logdir=args.save_dir
 def Parse_Args():
     parser = argparse.ArgumentParser();
     parser.add_argument("--data_dir", type=str, default = "GlobecomPOWDER/")
-    parser.add_argument("--task", type=str, default = "transmitter")
+    parser.add_argument("--task", type=str, default = "transmitter", choices = ["transmitter", "protocol", "joint"],help = "options are transmitter, protocol, or joint")
     parser.add_argument("--save_dir", type=str, default = "./")
     parser.add_argument("--model_checkpoint", type = str, default = "./")
-    parser.add_argument("--sample_len", type=int, default = 1024)
-    parser.add_argument("--sample_sublen", type = int, default = 32)
-    parser.add_argument("--samples_per_sig", type = int, default = 10)
+    #parser.add_argument("--sample_len", type=int, default = 1024)
     parser.add_argument("--max_samples", type=int, default = 10000)
     parser.add_argument("--data_day", nargs = "+",type=int, default = [1, 2], help = "takes input as --data_day 1 2")
     parser.add_argument("--batch_sz", type=int, default = 128)
     parser.add_argument("--lr", type=float, default = 0.001)
-    parser.add_argument("--epochs", type=int, default = 200)
+    parser.add_argument("--epochs", type=int, default = 25)
     parser.add_argument("--checkpoint", type=int, default = 100)
-    parser.add_argument("--signal_type", type = str, default = "Complex", help = "Can select from Mag, Phase, Complex, real, imag")
+    parser.add_argument("--signal_type", type = str, default = "All",choices = ["Mag", "Phase", "Complex", "Real", "Imag", "All"] , help = "options are Mag, Phase, Complex, Real, Imag, or All")
     parser.add_argument("--device", type = str, default = "cuda")
-    parser.add_argument("--reservoir_size", type = int, default = 1024)
-    parser.add_argument("--n_reservoirs", type = int, default = 1, help = "number of reservoirs to cascade together")
-    parser.add_argument("--workers", type = int, default = 1)
     parser.add_argument("--eval_only", action = 'store_true')
 
     args = parser.parse_args();
@@ -43,10 +35,8 @@ def Parse_Args():
 
 def train(model = None, xtrain = np.array([]), ytrain = np.array([]), batch_sz = 100, epochs = 100, lr = 0.001 , savepath = "./", i_checkpoint = 25, device = "cuda", val_split = 0.05):
     """
-    
     """
-        
-    writer = SummaryWriter(savepath)
+
     if val_split != 0:
         val_index = int(np.floor(xtrain.shape[0]*val_split));
         xval = torch.tensor(xtrain[:val_index]).type(torch.float);
@@ -75,24 +65,18 @@ def train(model = None, xtrain = np.array([]), ytrain = np.array([]), batch_sz =
         t0 = perf_counter();
         for x_batch, y_batch in tqdm(zip(xtrain_batched, ytrain_batched)):
             i += 1;
-            # Zero your gradients for every batch!
+            # Zero your gradients for every batch
             optimizer.zero_grad()
-
             x_batch = x_batch.to(device);
             y_batch = y_batch.flatten().to(device);
             #logits should be shape:(batch_sz, hidden_length)
             logits, loss = model(data_in = x_batch, y_true = y_batch);
-            #logits = logits.reshape((-1, logits.shape[1]));
             # Compute the loss and its gradients
-            #loss = loss_fn(logits, y_batch)
             loss.backward();
             loss_sum += loss.item();
             avg_loss = loss_sum/i;
-            writer.add_scalar("loss", loss, i);
-            writer.add_scalar("avg loss", avg_loss, i);
-
             if i%25 == 0:
-                print(avg_loss)
+                print("avg loss:", avg_loss)
             if i%i_checkpoint == 0:
                 model_savepath = savepath + "checkpoint-" + str(i) + ".pth";
                 torch.save(model.state_dict(), model_savepath);            
@@ -101,7 +85,6 @@ def train(model = None, xtrain = np.array([]), ytrain = np.array([]), batch_sz =
 
         t1 = perf_counter();
         time = time + (t1 - t0);
-        writer.add_scalar("time", time, epoch);
         history[epoch]["time"] = time;
         if val_split != 0:
             xval = xval.to(device)
@@ -109,17 +92,16 @@ def train(model = None, xtrain = np.array([]), ytrain = np.array([]), batch_sz =
             probs = torch.nn.functional.softmax(logits, dim = -1);
             preds = torch.argmax(probs, dim = -1).detach().cpu();
             acc_score = accuracy_score(preds.numpy(), yval);
-            writer.add_scalar("val_acc_score", acc_score, epoch);
             history[epoch]["val_acc"] = acc_score;
             print("Val acc:", acc_score)
-   
+
+    if savepath[-1] != "/": savepath += "/";
     model_savepath = savepath + "final_model"+ ".pth";
     torch.save(model.state_dict(), model_savepath); 
 
     history_savepath = savepath + "train_history.json";
     with open(history_savepath, "w") as f:
         json.dump(history, f);
-    writer.flush()
     return model;
     
 def evaluate(model = None, xtest = np.array([]), ytest = np.array([]), batch_sz = 32,savepath = "./" ,device = "cuda", labels = []):
@@ -191,13 +173,16 @@ def main(args):
     
     if args.task == "transmitter": classes = 4;
     elif args.task == "protocol": classes = 3;
-    elif args.task == "both": classes = 12;
+    elif args.task == "joint": classes = 12;
+
+    if os.path.isdir(args.save_dir) != True:
+        os.mkdir(args.save_dir);
 
     print("Loading data...")
-    processor = POWDERRF_Processor(datadir = args.data_dir, sample_len = args.sample_len, samples_per_sig = args.samples_per_sig, max_samples = args.max_samples, data_days = args.data_day, savedir = args.save_dir);
+    processor = POWDERRF_Processor(datadir = args.data_dir, sample_len = 1024, samples_per_sig = 10, max_samples = args.max_samples, data_days = args.data_day, savedir = args.save_dir);
     xtrain, ytrain, xtest, ytest = processor(train_test_split=.8, signal_type=args.signal_type, task = args.task, loaddatadict = False);
     
-    model = Conv1D_RF_Classifier(classes = classes, seq_len = args.sample_len)
+    model = Conv1D_RF_Classifier(classes = classes)
     
     if args.eval_only == False:
         print("Beginnig Training...")

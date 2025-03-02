@@ -2,18 +2,17 @@ import os
 import tqdm
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.io as sio
 import pandas as pd
 import json
 import torch
 import random
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder, OrdinalEncoder
+from sklearn.preprocessing import OneHotEncoder
 from tqdm import tqdm
 
 
 class POWDERRF_Processor():
 
-    def __init__(self, datadir = "", sample_len = 512, samples_per_sig = 10, max_samples = 1000,savedir = None, data_days = [1, 2], protocols = ["5G", "4G", "WiFi"]):
+    def __init__(self, datadir = "", sample_len = 1024, samples_per_sig = 10, max_samples = 1000,savedir = None, data_days = [1, 2], transmitters = ["bes", "browning", "honors", "meb"],protocols = ["5G", "4G", "WiFi"]):
         """
         Data processor for the POWDER RF fingerprint dataset
         datadir = dirctory holding powder
@@ -32,11 +31,12 @@ class POWDERRF_Processor():
         self.max_samples = max_samples;
         self.samples_per_sig = samples_per_sig;
         self.data_days = data_days;
+        self.transmitters = transmitters;
         self.protocols = protocols;
         self.ytrain = None;
         self.datadict = None;
 
-    def __call__(self,train_test_split = .8, signal_type = "Mag",task = "transmitter"  , normalize = True ,loaddatadict = False):
+    def __call__(self,train_test_split = .8, signal_type = "All",task = "transmitter"  , normalize = True ,loaddatadict = False):
         """
         train_test_split = percetnage of overall dataset to be training
         signal_type = if signal should be All,real, imag, Mag, or Phase
@@ -55,16 +55,16 @@ class POWDERRF_Processor():
         for file_key in tqdm(self.datadict.keys()):
             if task == "protocol":y_samples = self.datadict[file_key]["protocol"]
             elif task == "transmitter": y_samples = self.datadict[file_key]["transmitter"].split("__")[0];  
-            elif task == "both": y_samples = self.datadict[file_key]["transmitter"].split("__")[0] +"_"+ self.datadict[file_key]["protocol"];
+            elif task == "joint": y_samples = self.datadict[file_key]["transmitter"].split("__")[0] +"_"+ self.datadict[file_key]["protocol"];
                 
             I_x_samples = self.datadict[file_key]["I_signal"];
             Q_x_samples = self.datadict[file_key]["Q_signal"];
             
             if signal_type == "Complex":
                 x_samples = np.array(I_x_samples) +np.array( Q_x_samples)*1.0j;
-            elif signal_type == "real":
+            elif signal_type == "Real":
                 x_samples = I_x_samples;
-            elif signal_type == "imag":
+            elif signal_type == "Imag":
                 x_samples = Q_x_samples;
             elif signal_type == "Mag":
                 x_samples = np.array(I_x_samples) + np.array(Q_x_samples)* 1.0j;
@@ -88,10 +88,6 @@ class POWDERRF_Processor():
                 x_data_mean = np.mean(x_samples, axis = 0);
                 x_data_std = np.std(x_samples, axis = 0);
                 x_samples = (x_samples - x_data_mean)/x_data_std;
-                
-                #x_data_min = np.min(x_samples, axis = 0);
-                #x_data_max = np.max(x_samples, axis = 0);
-                #x_samples = (x_samples - x_data_min)/(x_data_max - x_data_min);
             
             y_data.extend([y_samples]*len(x_samples));
             x_data.extend(x_samples);
@@ -134,8 +130,10 @@ class POWDERRF_Processor():
             if ".json" not in file: continue;
             #filter files by protocol and day
             filename_split = file.split(sep = "_");
+            transmitter = filename_split[3];
             protocol = filename_split[0];
             day = int(filename_split[2]);
+            if transmitter not in self.transmitters: continue;
             if protocol not in self.protocols: continue;
             if day not in self.data_days: continue;
             files.append(file);
