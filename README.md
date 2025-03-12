@@ -5,7 +5,7 @@ On the givene dataset the model achieves 86% accuracy in protocol classification
 solutions, as they can achieve also 100% performance in approx.10 seconds for classifying the transmitter and approx.20 seconds for classifying protocols and joint classification.
 
 ## Installation
-
+    pip install -r requirements.txt
 ### How to run Training and Evaluation
     
     python train.py
@@ -17,5 +17,4 @@ solutions, as they can achieve also 100% performance in approx.10 seconds for cl
         --epochs 25
         --device "cuda"
 
-## Licensne
-MIT License
+
