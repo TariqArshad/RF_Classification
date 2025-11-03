@@ -36,7 +36,7 @@ class POWDERRF_Processor():
         self.ytrain = None;
         self.datadict = None;
 
-    def __call__(self,train_test_split = .8, signal_type = "All",task = "transmitter"  , normalize = True ,loaddatadict = False):
+    def __call__(self,train_test_split = .8, signal_type = "All",task = "transmitter" ,loaddatadict = False):
         """
         train_test_split = percetnage of overall dataset to be training
         signal_type = if signal should be All,real, imag, Mag, or Phase
@@ -81,13 +81,6 @@ class POWDERRF_Processor():
                 Q_ = np.array( Q_x_samples)
                 Q_ = np.expand_dims(Q_, axis = 1)
                 x_samples = np.concatenate([I_, Q_, Mag, Phase] ,axis = 1);
-
-                
-            # normalization, should make into own function
-            if normalize:
-                x_data_mean = np.mean(x_samples, axis = 0);
-                x_data_std = np.std(x_samples, axis = 0);
-                x_samples = (x_samples - x_data_mean)/x_data_std;
             
             y_data.extend([y_samples]*len(x_samples));
             x_data.extend(x_samples);
@@ -114,6 +107,9 @@ class POWDERRF_Processor():
         x_test = x_data[train_split_index:];
         y_train = y_data[:train_split_index];
         y_test = y_data[train_split_index:];
+        
+        self.data_mean = np.mean(np.transpose(x_train).reshape(x_train.shape[1], -1), axis = -1)
+        self.data_std = np.std(np.transpose(x_train).reshape(x_train.shape[1], -1), axis = -1)
 
         self.x_train = x_train;
         self.x_test = x_test;
@@ -121,7 +117,11 @@ class POWDERRF_Processor():
         self.y_test = y_test;
 
         return x_train, y_train, x_test, y_test;
-        
+
+    def z_normalize(self, samples):
+        samples = (samples - self.data_mean.reshape(1, self.data_mean.shape[0], 1))/self.data_std.reshape(1, self.data_std.shape[0], 1);
+        return samples;
+    
     def parse_labels(self, save = False):
         datadict = {}
         files = [];
