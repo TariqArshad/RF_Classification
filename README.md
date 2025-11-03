@@ -18,12 +18,13 @@ solutions, as they can achieve also 100% performance in approx.10 seconds for cl
         --device "cuda"
 
 
+#### Citation
+    @inproceedings{RFCLASSIFY,
+    author    = {Abdul-Quddoos, Tariq and Sharmin, Tasnia and Li, Xiangfang and Qian, Lijun},
+    year      = {2025},
+    month     = {06},
+    pages     = {2168-2173},
+    title     = {Transmitter Identification and Protocol Categorization in Shared Spectrum via Multi-Task RF Classification at the Network Edge},
+    doi       = {10.1109/ICCWorkshops67674.2025.11162461}
+    }
 
-@inproceedings{RFCLASSIFY,
-author = {Abdul-Quddoos, Tariq and Sharmin, Tasnia and Li, Xiangfang and Qian, Lijun},
-year = {2025},
-month = {06},
-pages = {2168-2173},
-title = {Transmitter Identification and Protocol Categorization in Shared Spectrum via Multi-Task RF Classification at the Network Edge},
-doi = {10.1109/ICCWorkshops67674.2025.11162461}
-}
